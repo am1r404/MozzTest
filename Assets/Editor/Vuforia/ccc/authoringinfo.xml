@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<QCARInfo>
+    <TargetSet version="3.4">
+        <AreaTarget version="5.2" bbox="-5.7080 -6.7701 -39.8953 3.4663 1.7357 2.7595" area="90" targetId="51af911bfb0d4ec780d8a0dddfca3075" name="ccc" pathAuthoring="51af911bfb0d4ec780d8a0dddfca3075_authoring.glb" pathOcclusion="51af911bfb0d4ec780d8a0dddfca3075_occlusion.3dt" pathNavMesh="51af911bfb0d4ec780d8a0dddfca3075_navmesh.glb" cloudTarget="false" />
+    </TargetSet>
+</QCARInfo>
