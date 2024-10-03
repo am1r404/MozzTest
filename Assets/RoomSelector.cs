@@ -30,20 +30,17 @@ public class RoomSelector : MonoBehaviour
     public float moveSpeed = 5f;
     public LineRenderer lineRenderer;
 
-    [Header("Go Button")]
-    public Button goButton;
+    [Header("UI Elements")]
+    public GameObject panel;
 
-    private Transform pointB;
-    private bool isGoButtonPressed = false;
-    
+    private Vector3[] pathCorners;
+    private int currentPathIndex = 0;
+
     private NavMeshPath path;
     private bool isPathValid = false;
-    private int currentPathIndex = 0;
-    private bool isMoving = false;
 
     void Start()
     {
-        // Add listeners to room buttons
         bedroom1Button.onClick.AddListener(() => SelectRoom(bedroom1Point));
         bedroom2Button.onClick.AddListener(() => SelectRoom(bedroom2Point));
         bedroom3Button.onClick.AddListener(() => SelectRoom(bedroom3Point));
@@ -53,43 +50,82 @@ public class RoomSelector : MonoBehaviour
         diningRoomButton.onClick.AddListener(() => SelectRoom(diningRoomPoint));
         terraceButton.onClick.AddListener(() => SelectRoom(terracePoint));
 
-        // Add listeners to Go button
-        AddGoButtonListeners();
-
-        // Initialize LineRenderer if not assigned
         if (lineRenderer == null && arrow != null)
         {
             lineRenderer = arrow.GetComponent<LineRenderer>();
         }
-        
+
         path = new NavMeshPath();
+
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(arrow.transform.position, out hit, 1.0f, NavMesh.AllAreas))
+        {
+            arrow.transform.position = hit.position;
+        }
+        else
+        {
+            Debug.LogWarning("Arrow is not on the NavMesh at the start.");
+        }
     }
 
     void SelectRoom(Transform destination)
     {
         NavMeshHit hit;
+        Vector3 destinationPosition;
+
         if (NavMesh.SamplePosition(destination.position, out hit, 1.0f, NavMesh.AllAreas))
         {
-            pointB = destination;
-            pointB.position = hit.position;
+            destinationPosition = hit.position;
             Debug.Log("Selected Room: " + destination.name);
-            RecalculatePath();
+            RecalculatePath(destinationPosition);
+
+            if (isPathValid)
+            {
+                currentPathIndex = 0;
+                Debug.Log("Path is valid, arrow is ready to move when mouse button is held down.");
+            }
+            else
+            {
+                Debug.LogWarning("Cannot move. Path is invalid.");
+            }
+
+            if (panel != null)
+            {
+                panel.SetActive(false);
+            }
+            else
+            {
+                Debug.LogWarning("Panel reference is missing.");
+            }
         }
         else
         {
             Debug.LogWarning("Selected room is not on the NavMesh.");
+            isPathValid = false;
         }
     }
-    
-    void RecalculatePath()
+
+    void RecalculatePath(Vector3 destinationPosition)
     {
-        if (arrow == null || pointB == null)
+        if (arrow == null)
             return;
 
-        if (NavMesh.CalculatePath(arrow.transform.position, pointB.position, NavMesh.AllAreas, path))
+        if (NavMesh.CalculatePath(arrow.transform.position, destinationPosition, NavMesh.AllAreas, path))
         {
             isPathValid = path.status == NavMeshPathStatus.PathComplete;
-            UpdateLineRenderer();
+
+            if (isPathValid)
+            {
+                Debug.Log("Path successfully calculated.");
+                UpdateLineRenderer();
+
+                pathCorners = path.corners;
+            }
+            else
+            {
+                Debug.LogWarning("Path calculation failed: Path is incomplete.");
+                isPathValid = false;
+            }
         }
         else
         {
@@ -100,133 +136,65 @@ public class RoomSelector : MonoBehaviour
 
     void Update()
     {
-        if (arrow != null && pointB != null)
+        if (arrow != null)
         {
-            if (isMoving)
+            if (Input.GetMouseButton(0) && isPathValid && currentPathIndex < pathCorners.Length)
             {
                 MoveAlongPath();
             }
         }
+        else
+        {
+            Debug.LogWarning("Arrow reference is missing.");
+        }
     }
-    
+
     void MoveAlongPath()
     {
-        if (!isMoving || !isPathValid || currentPathIndex >= path.corners.Length)
+        if (!isPathValid || currentPathIndex >= pathCorners.Length)
             return;
 
-        Vector3 targetPosition = path.corners[currentPathIndex];
+        Vector3 targetPosition = pathCorners[currentPathIndex];
         arrow.transform.position = Vector3.MoveTowards(arrow.transform.position, targetPosition, moveSpeed * Time.deltaTime);
 
-        // Rotate the arrow towards the next waypoint
         Vector3 direction = targetPosition - arrow.transform.position;
         if (direction != Vector3.zero)
         {
-            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-            arrow.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
+            Quaternion targetRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+
+            // Option 1: Using rotation offset
+            Quaternion rotationOffset = Quaternion.Euler(0, 0, 0); // Adjust as needed
+            arrow.transform.rotation = targetRotation * rotationOffset;
+
+            // Option 2: Using Transform.Rotate
+            // arrow.transform.rotation = targetRotation;
+            // arrow.transform.Rotate(90, 0, 90, Space.Self); // Adjust as needed
         }
 
         if (Vector3.Distance(arrow.transform.position, targetPosition) < 0.1f)
         {
             currentPathIndex++;
-            if (currentPathIndex >= path.corners.Length)
+            if (currentPathIndex >= pathCorners.Length)
             {
-                isMoving = false;
-                Debug.Log("Arrow has reached the destination: " + pointB.name);
+                isPathValid = false;
+                Debug.Log("Arrow has reached the destination.");
             }
         }
     }
-    
-    void HandlePlayerMovement()
-    {
-        float moveX = Input.GetAxis("Horizontal") * moveSpeed * Time.deltaTime;
-        float moveY = Input.GetAxis("Vertical") * moveSpeed * Time.deltaTime;
-        arrow.transform.position += new Vector3(moveX, moveY, 0);
-    }
 
-    void MoveArrowTowardsPointB()
-    {
-        // If you want the arrow to move towards Point B, uncomment the following line
-        // arrow.transform.position = Vector3.MoveTowards(arrow.transform.position, pointB.position, moveSpeed * Time.deltaTime);
-
-        // Optionally, check if arrow has reached the destination
-        if (Vector3.Distance(arrow.transform.position, pointB.position) < 0.1f)
-        {
-            Debug.Log("Arrow has reached the destination: " + pointB.name);
-            // Additional logic when destination is reached
-        }
-    }
-
-    void RotateArrowTowardsPointB()
-    {
-        Vector3 direction = pointB.position - arrow.transform.position;
-        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-        arrow.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
-    }
 
     void UpdateLineRenderer()
     {
         if (!isPathValid || lineRenderer == null)
         {
-            lineRenderer.positionCount = 0;
+            if (lineRenderer != null)
+            {
+                lineRenderer.positionCount = 0;
+            }
             return;
         }
 
         lineRenderer.positionCount = path.corners.Length;
         lineRenderer.SetPositions(path.corners);
-    }
-
-    void AddGoButtonListeners()
-    {
-        EventTrigger trigger = goButton.gameObject.GetComponent<EventTrigger>();
-        if (trigger == null)
-        {
-            trigger = goButton.gameObject.AddComponent<EventTrigger>();
-        }
-
-        // Pointer Down event
-        EventTrigger.Entry pointerDownEntry = new EventTrigger.Entry();
-        pointerDownEntry.eventID = EventTriggerType.PointerDown;
-        pointerDownEntry.callback.AddListener((data) => { OnGoButtonDown(); });
-        trigger.triggers.Add(pointerDownEntry);
-
-        // Pointer Up event
-        EventTrigger.Entry pointerUpEntry = new EventTrigger.Entry();
-        pointerUpEntry.eventID = EventTriggerType.PointerUp;
-        pointerUpEntry.callback.AddListener((data) => { OnGoButtonUp(); });
-        trigger.triggers.Add(pointerUpEntry);
-    }
-
-    public void OnGoButtonDown()
-    {
-        if (isPathValid)
-        {
-            isMoving = true;
-            currentPathIndex = 0;
-            Debug.Log("Go button pressed");
-        }
-        else
-        {
-            Debug.LogWarning("Cannot move. Path is invalid.");
-        }
-    }
-
-    public void OnGoButtonUp()
-    {
-        isMoving = false;
-        Debug.Log("Go button released");
-    }
-
-    public void UpdatePlayerPosition(Vector3 gpsPosition)
-    {
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(gpsPosition, out hit, 1.0f, NavMesh.AllAreas))
-        {
-            arrow.transform.position = hit.position;
-            RecalculatePath();
-        }
-        else
-        {
-            Debug.LogWarning("GPS position is not on the NavMesh.");
-        }
     }
 }
